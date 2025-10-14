@@ -2,12 +2,13 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-// import mongoose from "mongoose";   
+// import mongoose from "mongoose";
 
 import nftRoutes from "./routes/nft.js";
 import nftAlchemy from "./routes/alchemy.js";
 import nftPrice from "./routes/price.js";
-import walletRoutes from "./routes/wallet.js"; // <-- Added wallet.js
+import walletRoutes from "./routes/wallet.js";
+import alchemySales from "./routes/nftpricehistory.js"; // <-- Added Alchemy sales history
 
 dotenv.config();
 
@@ -30,7 +31,8 @@ app.use(express.json());
 app.use("/api/nft", nftRoutes);
 app.use("/data/alchemy", nftAlchemy);
 app.use("/price", nftPrice);
-app.use("/api/wallet", walletRoutes); // <-- Wallet routes
+app.use("/api/wallet", walletRoutes);
+app.use("/api/sales", alchemySales); // <-- New sales history endpoint
 
 // ------------------ Start Server ------------------
 app.listen(PORT, () => {

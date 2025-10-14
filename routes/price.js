@@ -2,7 +2,7 @@ import express from "express";
 
 const router = express.Router();
 
-async function fetchWithTimeout(url, opts = {}, ms = 10000) {
+async function fetchWithTimeout(url, opts = {}, ms = 100000) {
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), ms);
   try {
@@ -129,4 +129,4 @@ router.get("/sales/:contract/:tokenId", async (req, res) => {
   }
 });
 
-export default router;  
+export default router; 
