@@ -12,121 +12,104 @@ async function fetchWithTimeout(url, opts = {}, ms = 100000) {
   }
 }
 
-// -------- Route: Fetch NFT sales (full history) --------
+// -------- Route: Fetch NFT transfers via Moralis --------
 router.get("/sales/:contract/:tokenId", async (req, res) => {
   try {
     const { contract, tokenId } = req.params;
+    const chain = req.query.chain || "eth";
+    const limit = 100;
+    let cursor = null;
+    let allTransfers = [];
 
-    let continuation = null;
-    let allSales = [];
-
-    // keep fetching until no continuation
+    // Fetch all pages
     do {
-      const url = new URL("https://api.reservoir.tools/sales/v6");
-      url.searchParams.append("contract", contract.toLowerCase());
-      url.searchParams.append("token", tokenId);
-      url.searchParams.append("limit", "1000"); // max allowed
-      if (continuation) {
-        url.searchParams.append("continuation", continuation);
-      }
+      const url = new URL(
+        `https://deep-index.moralis.io/api/v2.2/nft/${contract}/${tokenId}/transfers`
+      );
+      url.searchParams.append("chain", chain);
+      url.searchParams.append("limit", limit);
+      url.searchParams.append("order", "desc");
+      if (cursor) url.searchParams.append("cursor", cursor);
 
       const r = await fetchWithTimeout(url.toString(), {
-        headers: { accept: "application/json" },
+        headers: {
+          accept: "application/json",
+          "X-API-Key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6Ijg4ODZlZWU1LTA5MmItNDVkZC1iYWZkLTI1NDZkMGUwZjMzNCIsIm9yZ0lkIjoiNDY4NzQ4IiwidXNlcklkIjoiNDgyMjIyIiwidHlwZUlkIjoiNzhiODE1OGUtNWNlNy00MmQ4LWE2ZGQtNGIzOGIzNzQ0MzQwIiwidHlwZSI6IlBST0pFQ1QiLCJpYXQiOjE3NTY4MTMxNTUsImV4cCI6NDkxMjU3MzE1NX0.9OdlUNZLBwnkAvld6tiCu2wefNjlOcf6f5e-uN2J2n4",
+        },
       });
 
-      if (!r.ok) throw new Error(`Reservoir error ${r.status}`);
+      if (!r.ok) throw new Error(`Moralis error ${r.status}`);
       const data = await r.json();
 
-      // merge only matching tokenId
-      const filteredSales = (data.sales || []).filter(
-        (sale) => sale.token?.tokenId?.toString() === tokenId.toString()
-      );
-
-      allSales = allSales.concat(filteredSales);
-
-      continuation = data.continuation || null;
-    } while (continuation);
+      allTransfers = allTransfers.concat(data.result || []);
+      cursor = data.cursor || null;
+    } while (cursor);
 
     // ----- Stats -----
+    const tradeCount = allTransfers.length;
+    let totalVolume = 0;
     let highestSale = 0;
     let lowestSale = Infinity;
-    let totalVolume = 0;
-    let totalVolumeUSD = 0;
-    let tradeCount = 0;
 
-    const enrichedSales = allSales.map((sale) => {
-      const ethValue = Number(sale.price?.amount?.decimal || 0);
-      const usdValue = Number(sale.price?.amount?.usd || 0);
+    const enrichedSales = allTransfers.map((tx) => {
+      // Convert wei -> ETH
+      const ethValue = Number(tx.value || 0) / 1e18;
 
-      if (ethValue > highestSale) highestSale = ethValue;
-      if (ethValue < lowestSale) lowestSale = ethValue;
-      totalVolume += ethValue;
-      totalVolumeUSD += usdValue;
-      tradeCount++;
+      if (ethValue > 0) {
+        totalVolume += ethValue;
+        if (ethValue > highestSale) highestSale = ethValue;
+        if (ethValue < lowestSale) lowestSale = ethValue;
+      }
 
       return {
-        id: sale.id,
-        saleId: sale.saleId,
-        orderId: sale.orderId,
-        orderSource: sale.orderSource,
-        orderSide: sale.orderSide,
-        orderKind: sale.orderKind,
-        from: sale.from,
-        to: sale.to,
-        token: {
-          contract: sale.token?.contract || contract,
-          tokenId: sale.token?.tokenId || tokenId,
-          name: sale.token?.name || null,
-          collection: {
-            id: sale.token?.collection?.id || null,
-            name: sale.token?.collection?.name || null,
-          },
-        },
-        amount: sale.amount,
-        fillSource: sale.fillSource,
-        block: sale.block,
-        txHash: sale.txHash,
-        logIndex: sale.logIndex,
-        batchIndex: sale.batchIndex,
-        timestamp: sale.timestamp,
-        price: {
-          currency: sale.price?.currency,
-          amount: sale.price?.amount,
-          netAmount: sale.price?.netAmount,
-        },
-        washTradingScore: sale.washTradingScore,
-        marketplaceFeeBps: sale.marketplaceFeeBps,
-        paidFullRoyalty: sale.paidFullRoyalty,
-        feeBreakdown: sale.feeBreakdown || [],
-        comment: sale.comment,
-        isDeleted: sale.isDeleted,
-        createdAt: sale.createdAt,
-        updatedAt: sale.updatedAt,
+        block_number: tx.block_number,
+        block_timestamp: tx.block_timestamp,
+        block_hash: tx.block_hash,
+        transaction_hash: tx.transaction_hash,
+        transaction_index: tx.transaction_index,
+        log_index: tx.log_index,
+        // value now in ETH
+        value: ethValue,
+        contract_type: tx.contract_type,
+        transaction_type: tx.transaction_type,
+        token_address: tx.token_address,
+        token_id: tx.token_id,
+        from_address: tx.from_address,
+        from_address_entity: tx.from_address_entity || null,
+        from_address_entity_logo: tx.from_address_entity_logo || null,
+        from_address_label: tx.from_address_label || null,
+        to_address: tx.to_address,
+        to_address_entity: tx.to_address_entity || null,
+        to_address_entity_logo: tx.to_address_entity_logo || null,
+        to_address_label: tx.to_address_label || null,
+        amount: tx.amount,
+        verified: tx.verified,
+        operator: tx.operator || null,
+        possible_spam: tx.possible_spam || false,
+        verified_collection: tx.verified_collection || false,
       };
     });
 
     const avgPrice = tradeCount > 0 ? totalVolume / tradeCount : 0;
-    const avgPriceUSD = tradeCount > 0 ? totalVolumeUSD / tradeCount : 0;
 
     res.json({
       contract,
       tokenId,
-      highestSale,
-      lowestSale: lowestSale === Infinity ? 0 : lowestSale,
-      avgPrice,
-      avgPriceUSD,
-      totalVolume,
-      totalVolumeUSD,
+      highestSale: Number(highestSale.toFixed(6)),
+      lowestSale: lowestSale === Infinity ? 0 : Number(lowestSale.toFixed(6)),
+      avgPrice: Number(avgPrice.toFixed(6)),
+      totalVolume: Number(totalVolume.toFixed(6)),
       tradeCount,
       sales: enrichedSales,
-      totalPages: Math.ceil(enrichedSales.length / 1000),
+      totalPages: 1,
+      cursor: null,
     });
   } catch (err) {
     res.status(500).json({
-      error: "Failed to fetch NFT sales",
+      error: "Failed to fetch NFT transfers",
       details: err.message,
     });
   }
 });
 
-export default router; 
+export default router;
