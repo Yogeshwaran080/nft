@@ -9,6 +9,7 @@ import nftAlchemy from "./routes/alchemy.js";
 import nftPrice from "./routes/price.js";
 import walletRoutes from "./routes/wallet.js";
 import alchemySales from "./routes/nftpricehistory.js"; // <-- Added Alchemy sales history
+import top from "./routes/top.js";
 
 dotenv.config();
 
@@ -33,6 +34,7 @@ app.use("/data/alchemy", nftAlchemy);
 app.use("/price", nftPrice);
 app.use("/api/wallet", walletRoutes);
 app.use("/api/sales", alchemySales); // <-- New sales history endpoint
+app.use("/api/top",top);
 
 // ------------------ Start Server ------------------
 app.listen(PORT, () => {
